@@ -553,11 +553,14 @@ export function injectBudgetSection(transactions) {
         <div id="budget-bars"></div>
     `;
 
-    const trendSection = document.querySelector('#trend-chart-container')?.closest('section');
-    const historySection = document.querySelector('.history-section');
-    const insertBefore = trendSection || historySection;
-    if (insertBefore) {
-        insertBefore.parentNode.insertBefore(panel, insertBefore);
+    // Usa o anchor fixo do HTML como ponto de inserção garantido em todos os contextos (desktop, mobile, PWA)
+    const anchor = document.getElementById('dynamic-panels-anchor');
+    if (anchor) {
+        anchor.appendChild(panel);
+    } else {
+        // Fallback: insere antes do histórico
+        const historySection = document.querySelector('.history-section');
+        if (historySection) historySection.parentNode.insertBefore(panel, historySection);
     }
 
     document.getElementById('btn-configure-budgets').addEventListener('click', () => openBudgetModal());
@@ -1321,11 +1324,20 @@ export function injectGoalsPanel() {
         <div id="goals-list"></div>
     `;
 
-    // Insere antes do budget panel se existir, ou antes do trend chart
-    const budgetPanel = document.getElementById('budget-panel');
-    const trendSection = document.querySelector('#trend-chart-container')?.closest('section');
-    const insertBefore = budgetPanel || trendSection || document.querySelector('.history-section');
-    if (insertBefore) insertBefore.parentNode.insertBefore(panel, insertBefore);
+    // Usa o anchor fixo do HTML — goals vai ANTES do budget dentro do anchor
+    const anchor = document.getElementById('dynamic-panels-anchor');
+    if (anchor) {
+        const budgetPanel = document.getElementById('budget-panel');
+        if (budgetPanel) {
+            anchor.insertBefore(panel, budgetPanel); // Goals acima do Budget
+        } else {
+            anchor.appendChild(panel);
+        }
+    } else {
+        // Fallback
+        const historySection = document.querySelector('.history-section');
+        if (historySection) historySection.parentNode.insertBefore(panel, historySection);
+    }
 
     document.getElementById('btn-add-goal').addEventListener('click', () => openGoalModal());
     renderGoals();
