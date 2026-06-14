@@ -98,9 +98,54 @@ cadastroForm.addEventListener('submit', async function (e) {
     const email = document.getElementById('cadastro-email').value.trim(); 
     const pass  = document.getElementById('password').value.trim();
 
+    // Validações locais: email e senha
+    const normalizeEmail = (em) => (String(em || '').trim().toLowerCase());
+
+    const isValidEmailStrict = (em) => {
+        if (typeof em !== 'string') return false;
+        const email = em.trim();
+        if (email.length > 254 || email.length === 0) return false;
+        // Local-part: 1-64 chars, domain: labels separated by dot, tld 2-63 letters
+        const re = /^[a-zA-Z0-9._%+-]{1,64}@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,63}$/;
+        if (!re.test(email)) return false;
+        // domain labels cannot start or end with hyphen and no consecutive dots
+        const domain = email.split('@')[1];
+        if (!domain || domain.includes('..')) return false;
+        const labels = domain.split('.');
+        for (const lbl of labels) {
+            if (!/^[a-zA-Z0-9-]+$/.test(lbl)) return false;
+            if (lbl.startsWith('-') || lbl.endsWith('-')) return false;
+        }
+        return true;
+    };
+
+    const isStrongPassword = (pw) => {
+        if (typeof pw !== 'string') return false;
+        if (pw.length < 10) return false; // mínimo recomendado
+        if (pw.length > 256) return false;
+        if (/[\s]/.test(pw)) return false; // sem espaços
+        // Ao menos uma maiúscula, uma minúscula, um dígito e um símbolo
+        const hasUpper = /[A-Z]/.test(pw);
+        const hasLower = /[a-z]/.test(pw);
+        const hasDigit = /[0-9]/.test(pw);
+        const hasSymbol = /[^A-Za-z0-9]/.test(pw);
+        return hasUpper && hasLower && hasDigit && hasSymbol;
+    };
+
+    const normalizedEmail = normalizeEmail(email);
+    if (!isValidEmailStrict(normalizedEmail)) {
+        showToast('E-mail inválido. Use um formato como usuario@gmail.com', 'error');
+        return;
+    }
+
+    if (!isStrongPassword(pass)) {
+        showToast('Senha fraca. Use ao menos 10 caracteres, incluindo maiúsculas, minúsculas, números e símbolos.', 'error');
+        return;
+    }
+
     // 2. Envia para o Supabase com os metadados (options)
     const { data, error } = await _supabase.auth.signUp({ 
-        email: email, 
+        email: normalizedEmail, 
         password: pass,
         options: {
             data: {
