@@ -21,7 +21,10 @@ import {
     initAmountMask,
     getRawAmountValue,
     initMobileUX,
-    initOnboarding
+    initOnboarding,
+    setSupabaseContext,
+    loadGoalsFromDB,
+    loadBudgetsFromDB
 } from './features.js';
 
 import {
@@ -292,12 +295,36 @@ function _requireValidSession() {
 //  NAVEGAÇÃO DE TELAS
 // ============================================================
 
+// ── Garante que as tabelas user_goals e user_budgets existam para o usuário ──
+// As tabelas devem ser criadas no Supabase Dashboard com as SQLs abaixo:
+// 
+async function _ensureUserTables() {
+    // Apenas verifica se já existe registro de orçamento; cria se não
+    try {
+        const { error } = await _supabase
+            .from('user_budgets')
+            .select('user_id')
+            .eq('user_id', currentUser.id)
+            .maybeSingle();
+        // Se a tabela não existir, o erro aparece no console e o app continua
+        if (error && error.code !== 'PGRST116') {
+            console.warn('user_budgets não encontrada — crie as tabelas no Supabase Dashboard.', error.message);
+        }
+    } catch (e) { /* silencia */ }
+}
+
 async function showAppScreen() {
     loginView.classList.add('hidden');
     appView.classList.remove('hidden');
 
     const rawName = currentUser.user_metadata?.full_name || currentUser.email.split('@')[0];
     displayUser.innerText = sanitizeString(rawName);
+
+    // ── Contexto Supabase para features.js (metas e orçamentos no banco) ──
+    setSupabaseContext(_supabase, currentUser.id);
+    await _ensureUserTables();
+    await loadGoalsFromDB(_supabase, currentUser.id);
+    await loadBudgetsFromDB(_supabase, currentUser.id);
 
     // ── Inicializa funcionalidades avançadas ──
     enhanceTableRows();
