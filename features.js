@@ -510,16 +510,60 @@ export function injectRadarChartSection() {
 //  4. SISTEMA DE ORÇAMENTOS POR CATEGORIA
 // ============================================================
 
-const BUDGET_KEY = 'atlas_budgets';
+// Budgets: Supabase como fonte de verdade + cache local
+let _budgetsCache = {};
 
-export function getBudgets() {
+export function getBudgets() { return _budgetsCache; }
+
+export async function loadBudgetsFromDB(supabase, userId) {
     try {
-        return JSON.parse(localStorage.getItem(BUDGET_KEY) || '{}');
-    } catch { return {}; }
+        const { data, error } = await supabase
+            .from('user_budgets')
+            .select('*')
+            .eq('user_id', userId)
+            .maybeSingle();
+        if (!error && data) {
+            let b = data.budgets;
+            if (typeof b === 'string') {
+                try { b = JSON.parse(b); } catch (e) { console.warn('loadBudgetsFromDB: budgets JSON parse failed', e); b = {}; }
+            }
+            _budgetsCache = b || {};
+            console.info('loadBudgetsFromDB: budgets loaded', _budgetsCache);
+        }
+    } catch (e) { console.warn('loadBudgetsFromDB:', e); }
 }
 
-function saveBudgets(budgets) {
-    localStorage.setItem(BUDGET_KEY, JSON.stringify(budgets));
+async function saveBudgets(budgets) {
+    const supabase = _dbSupabase;
+    const userId   = _dbUserId;
+    _budgetsCache = budgets;
+    if (!supabase || !userId) return;
+    try {
+        // Validação: garante chaves permitidas e valores numéricos
+        const allowed = ['Alimentação', 'Transporte', 'Lazer', 'Contas', 'Salário', 'Outros'];
+        const cleanBudgets = {};
+        Object.keys(budgets || {}).forEach(k => {
+            if (!allowed.includes(k)) return;
+            const v = Number(budgets[k]);
+            if (!isNaN(v) && v > 0) cleanBudgets[k] = v;
+        });
+
+        const payload = [{ user_id: userId, budgets: cleanBudgets }];
+        const { data, error, status, statusText } = await supabase
+            .from('user_budgets')
+            .upsert(payload, { onConflict: 'user_id' })
+            .select();
+
+        if (error) {
+            console.error('saveBudgets: erro ao upsert', { error, status, statusText, payload });
+            _showMiniToast('Erro ao salvar orçamentos: ' + (error.message || 'unknown'), 'error');
+        } else {
+            // Atualiza cache com o que veio do banco (data pode ser array)
+            if (Array.isArray(data) && data.length > 0) {
+                _budgetsCache = data[0].budgets || {};
+            }
+        }
+    } catch (e) { console.warn('saveBudgets:', e); }
 }
 
 export function injectBudgetSection(transactions) {
@@ -553,12 +597,11 @@ export function injectBudgetSection(transactions) {
         <div id="budget-bars"></div>
     `;
 
-    // Usa o anchor fixo do HTML como ponto de inserção garantido em todos os contextos (desktop, mobile, PWA)
     const anchor = document.getElementById('dynamic-panels-anchor');
     if (anchor) {
         anchor.appendChild(panel);
     } else {
-        // Fallback: insere antes do histórico
+        // Fallback caso o anchor não exista
         const historySection = document.querySelector('.history-section');
         if (historySection) historySection.parentNode.insertBefore(panel, historySection);
     }
@@ -1290,12 +1333,93 @@ export function showTableSkeleton(tbodyId = 'transaction-list', rows = 5) {
 //  10. PAINEL DE METAS FINANCEIRAS E EXTRAS
 // ============================================================
 
-const GOALS_KEY = 'atlas_goals';
-
-export function getGoals() {
-    try { return JSON.parse(localStorage.getItem(GOALS_KEY) || '[]'); } catch { return []; }
+// Referências ao Supabase e userId, preenchidas pelo script.js via setSupabaseContext()
+let _dbSupabase = null;
+let _dbUserId   = null;
+export function setSupabaseContext(supabase, userId) {
+    _dbSupabase = supabase;
+    _dbUserId   = userId;
 }
-function saveGoals(goals) { localStorage.setItem(GOALS_KEY, JSON.stringify(goals)); }
+
+// Goals: Supabase como fonte de verdade + cache local para renderização síncrona
+let _goalsCache = [];
+
+export function getGoals() { return _goalsCache; }
+
+export async function loadGoalsFromDB(supabase, userId) {
+    try {
+        const { data, error } = await supabase
+            .from('user_goals')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: true });
+        if (!error && data) _goalsCache = data;
+    } catch (e) { console.warn('loadGoalsFromDB:', e); }
+}
+
+async function saveGoals(goals) {
+    const supabase = _dbSupabase;
+    const userId   = _dbUserId;
+    _goalsCache = goals;
+    if (!supabase || !userId) return;
+    try {
+        // Apaga registros antigos do usuário (sincronização simples)
+        const delRes = await supabase.from('user_goals').delete().eq('user_id', userId);
+        if (delRes.error) {
+            console.warn('saveGoals: erro ao deletar metas antigas', delRes.error);
+        }
+
+        if (goals.length > 0) {
+            // Remove colunas gerenciadas pelo Supabase e força tipos antes de inserir
+            const rows = goals.map(({ id, created_at, createdAt, ...rest }) => ({
+                name: String(rest.name || ''),
+                emoji: rest.emoji || '🎯',
+                target: Number(rest.target) || 0,
+                current: Number(rest.current) || 0,
+                user_id: userId,
+            }));
+
+            // Validação mínima local para evitar payload inválido
+            const invalid = rows.find(r => !r.name || typeof r.target !== 'number' || isNaN(r.target) || r.target < 0 || isNaN(r.current));
+            if (invalid) {
+                console.error('saveGoals: payload inválido detectado antes de inserir', invalid);
+                _showMiniToast('Dados de meta inválidos. Verifique os campos.', 'error');
+                return;
+            }
+
+            const { data: inserted, error: insertError, status, statusText } = await supabase.from('user_goals').insert(rows).select();
+            if (insertError) {
+                console.error('saveGoals: erro ao inserir metas', { insertError, status, statusText, rows });
+
+                // Tratamento específico quando coluna não existe no esquema (ex: 'emoji')
+                const msg = String(insertError.message || '').toLowerCase();
+                if (msg.includes("could not find the 'emoji' column") || msg.includes('column "emoji" does not exist') || msg.includes("emoji")) {
+                    try {
+                        const rowsNoEmoji = rows.map(({ name, target, current, user_id }) => ({ name, target, current, user_id }));
+                        const { data: retried, error: retryErr } = await supabase.from('user_goals').insert(rowsNoEmoji).select();
+                        if (!retryErr) {
+                            if (Array.isArray(retried) && retried.length > 0) _goalsCache = retried;
+                            return;
+                        } else {
+                            console.error('saveGoals: retry sem emoji também falhou', retryErr);
+                            _showMiniToast('Erro ao salvar metas: ' + (retryErr.message || 'unknown'), 'error');
+                            return;
+                        }
+                    } catch (retryEx) {
+                        console.error('saveGoals: exceção no retry sem emoji', retryEx);
+                        _showMiniToast('Erro ao salvar metas.', 'error');
+                        return;
+                    }
+                }
+
+                _showMiniToast('Erro ao salvar metas: ' + (insertError.message || 'unknown'), 'error');
+            } else {
+                // Atualiza cache com valores retornados pelo banco, se houver
+                if (Array.isArray(inserted) && inserted.length > 0) _goalsCache = inserted;
+            }
+        }
+    } catch (e) { console.warn('saveGoals:', e); }
+}
 
 export function injectGoalsPanel() {
     if (document.getElementById('goals-panel')) return;
@@ -1324,17 +1448,17 @@ export function injectGoalsPanel() {
         <div id="goals-list"></div>
     `;
 
-    // Usa o anchor fixo do HTML — goals vai ANTES do budget dentro do anchor
     const anchor = document.getElementById('dynamic-panels-anchor');
     if (anchor) {
+        // Goals vai ANTES do budget dentro do anchor
         const budgetPanel = document.getElementById('budget-panel');
-        if (budgetPanel) {
-            anchor.insertBefore(panel, budgetPanel); // Goals acima do Budget
+        if (budgetPanel && anchor.contains(budgetPanel)) {
+            anchor.insertBefore(panel, budgetPanel);
         } else {
-            anchor.appendChild(panel);
+            anchor.insertBefore(panel, anchor.firstChild);
         }
     } else {
-        // Fallback
+        // Fallback caso o anchor não exista
         const historySection = document.querySelector('.history-section');
         if (historySection) historySection.parentNode.insertBefore(panel, historySection);
     }
@@ -1358,7 +1482,7 @@ function renderGoals() {
     }
 
     listEl.innerHTML = `
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(220px,100%),1fr));gap:1rem;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;">
             ${goals.map((g, i) => {
                 const pct = Math.min((g.current / g.target) * 100, 100);
                 const done = pct >= 100;
@@ -1539,18 +1663,20 @@ function openGoalModal(editIndex = null) {
     overlay.querySelector('#btn-cancel-goal').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-    overlay.querySelector('#btn-save-goal').addEventListener('click', () => {
+    overlay.querySelector('#btn-save-goal').addEventListener('click', async () => {
         const name = overlay.querySelector('#goal-name').value.trim();
         const target = getTargetRawValue();
         if (!name || isNaN(target) || target <= 0) {
             _showMiniToast('Preencha nome e valor alvo válido.', 'error');
             return;
         }
-        const newGoal = { name, target, current: g.current || 0, emoji: selectedEmoji, createdAt: Date.now() };
+        const newGoal = { name, target, current: g.current || 0, emoji: selectedEmoji };
         if (editIndex !== null) goals[editIndex] = { ...newGoal };
         else goals.push(newGoal);
-        saveGoals(goals);
         overlay.remove();
+        _showMiniToast('Salvando meta... ⚓', 'info');
+        await saveGoals(goals);
+        if (_dbSupabase && _dbUserId) await loadGoalsFromDB(_dbSupabase, _dbUserId);
         renderGoals();
         _showMiniToast('Meta salva! 🏆', 'success');
     });
@@ -1753,7 +1879,7 @@ window._atlasDepositGoal = function(index) {
     });
 
     // Confirm button
-    confirmBtn.addEventListener('click', () => {
+    confirmBtn.addEventListener('click', async () => {
         const amt = getRawValue();
         if (isNaN(amt) || amt <= 0) {
             _showMiniToast('Digite um valor válido', 'error');
@@ -1763,8 +1889,9 @@ window._atlasDepositGoal = function(index) {
         
         g.current = (g.current || 0) + amt;
         goals[index] = g;
-        saveGoals(goals);
         overlay.remove();
+        await saveGoals(goals);
+        if (_dbSupabase && _dbUserId) await loadGoalsFromDB(_dbSupabase, _dbUserId);
         renderGoals();
         
         if (g.current >= g.target) {
@@ -1788,11 +1915,12 @@ window._atlasDepositGoal = function(index) {
     depositInput.focus();
 };
 
-window._atlasDeleteGoal = function(index) {
+window._atlasDeleteGoal = async function(index) {
     if (!confirm('Excluir esta meta?')) return;
     const goals = getGoals();
     goals.splice(index, 1);
-    saveGoals(goals);
+    await saveGoals(goals);
+    if (_dbSupabase && _dbUserId) await loadGoalsFromDB(_dbSupabase, _dbUserId);
     renderGoals();
 };
 
@@ -2002,35 +2130,6 @@ export function initMobileUX() {
     document.querySelector('.drawer-close-bar')?.remove();
     document.querySelector('.fab-add-route')?.remove();
     document.querySelector('.form-section')?.classList.remove('mobile-open');
-
-    // ── PWA standalone: garante que os painéis dinâmicos sejam visíveis ──
-    const isStandalone =
-        window.matchMedia('(display-mode: standalone)').matches ||
-        window.navigator.standalone === true;
-
-    if (isStandalone) {
-        // Aplica classe ao root para CSS saber que está em modo PWA
-        document.documentElement.setAttribute('data-pwa', 'standalone');
-
-        // Re-injeta painéis se ainda não existirem (pode acontecer em cold start na PWA)
-        const ensurePanels = () => {
-            const goalsPanel  = document.getElementById('goals-panel');
-            const budgetPanel = document.getElementById('budget-panel');
-            if (goalsPanel)  { goalsPanel.style.display  = 'block'; goalsPanel.style.visibility  = 'visible'; }
-            if (budgetPanel) { budgetPanel.style.display = 'block'; budgetPanel.style.visibility = 'visible'; }
-        };
-
-        // Roda imediatamente e também após o carregamento das transações
-        ensurePanels();
-        window.addEventListener('atlas:budgets-updated', ensurePanels);
-
-        // MutationObserver para garantir que os painéis injetados dinamicamente fiquem visíveis
-        const panelObserver = new MutationObserver(() => ensurePanels());
-        panelObserver.observe(document.getElementById('app-view') || document.body, {
-            childList: true,
-            subtree: true,
-        });
-    }
 }
 
 // ============================================================
