@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://agazyxktzrkoyrnxivab.supabase.co wss://agazyxktzrkoyrnxivab.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://agazyxktzrkoyrnxivab.supabase.co wss://agazyxktzrkoyrnxivab.supabase.co https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=()">
     <title>Atlas Finance — Diário de Bordo</title>
@@ -131,9 +131,6 @@
                 </div>
             </div>
         </header>
-        <div id="alerts-container" class="container hidden" aria-live="polite">
-    </div>
-
        <main class="container" role="main">
             <div class="summary-cards" role="region" aria-label="Resumo financeiro">
                 <article class="card income">
@@ -157,6 +154,9 @@
                     </div>
                 </article>
             </div>
+
+            <!-- Alertas de débito próximo (fixed no desktop, inline strip no mobile) -->
+            <div id="alerts-container" class="hidden" aria-live="polite"></div>
 
             <div id="smart-insights" class="insights-container hidden">
                 <div class="insight-card">
@@ -276,7 +276,7 @@
                 </section>
             </div>
 
-            <!-- Anchor fixo para injeção dos painéis de Metas e Orçamento -->
+            <!-- Anchor para painéis de Metas e Orçamento -->
             <div id="dynamic-panels-anchor"></div>
 
            <section class="history-section" aria-label="Histórico de transações">
