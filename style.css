@@ -958,6 +958,7 @@ tbody tr:hover td { background: rgba(197,160,89,0.04); }
    NOTIFICATION CENTER & ALERTS
    ============================================================ */
 #alerts-container {
+    /* Desktop: painel lateral fixo à esquerda, fora do fluxo */
     position: fixed;
     top: 50%;
     left: 1.25rem;
@@ -1192,142 +1193,6 @@ tbody tr:hover td { background: rgba(197,160,89,0.04); }
     #kbd-hint-panel { display: none; }
     .insights-container { grid-template-columns: 1fr; }
     #goals-panel .goal-card { min-width: 100% !important; }
-}
-
-/* ============================================================
-   PAINÉIS DE METAS E ORÇAMENTO — MOBILE & PWA STANDALONE
-   Garante exibição correta em telas pequenas e no app instalado
-   ============================================================ */
-
-/* Força os painéis a aparecerem sempre, independente do modo */
-#goals-panel,
-#budget-panel {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-@media (max-width: 768px) {
-
-    /* ── Painel de Metas ── */
-    #goals-panel {
-        margin-bottom: 1.25rem;
-        padding: 1.25rem;
-        border-radius: 12px;
-    }
-
-    #goals-panel > div:first-child {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.75rem;
-    }
-
-    #btn-add-goal {
-        width: 100% !important;
-        min-height: 44px;
-        justify-content: center;
-        text-align: center;
-        font-size: 0.85rem !important;
-    }
-
-    /* Grid de metas: 1 coluna no mobile */
-    #goals-list > div {
-        grid-template-columns: 1fr !important;
-    }
-
-    .goal-card {
-        min-width: 0 !important;
-        width: 100% !important;
-        padding: 1rem !important;
-    }
-
-    /* Botões de ação dentro do goal-card */
-    .goal-card > div:last-child {
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
-
-    /* ── Painel de Orçamento ── */
-    #budget-panel {
-        margin-bottom: 1.25rem;
-        padding: 1.25rem;
-        border-radius: 12px;
-    }
-
-    #budget-panel > div:first-child {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.75rem;
-    }
-
-    #btn-configure-budgets {
-        width: 100% !important;
-        min-height: 44px;
-        text-align: center;
-        font-size: 0.85rem !important;
-    }
-
-    .budget-bar-item {
-        margin-bottom: 1.1rem;
-    }
-
-    .budget-category-name {
-        font-size: 0.88rem !important;
-    }
-
-    .budget-category-value {
-        font-size: 0.8rem !important;
-        text-align: right;
-        max-width: 55%;
-        line-height: 1.3;
-    }
-
-    /* ── Modal de orçamentos / metas no mobile ── */
-    .modal-box {
-        width: calc(100vw - 2rem) !important;
-        max-width: none !important;
-        max-height: 90svh !important;
-        overflow-y: auto !important;
-        border-radius: 16px 16px 0 0 !important;
-        margin: 0 !important;
-        padding: 1.5rem 1.25rem !important;
-    }
-
-    .modal-overlay {
-        align-items: flex-end !important;
-    }
-}
-
-/* ── PWA standalone: viewport extra-restrito (ex: iPhone sem barra) ── */
-@media (display-mode: standalone) {
-    #goals-panel,
-    #budget-panel {
-        display: block !important;
-    }
-
-    /* Compensa a safe area do notch/home indicator */
-    #goals-panel,
-    #budget-panel {
-        padding-left: max(1.25rem, env(safe-area-inset-left));
-        padding-right: max(1.25rem, env(safe-area-inset-right));
-    }
-}
-
-/* ── Telas muito pequenas (≤ 390px, ex: iPhone SE) ── */
-@media (max-width: 390px) {
-    #goals-panel,
-    #budget-panel {
-        padding: 1rem 0.9rem;
-    }
-
-    .budget-category-name,
-    .budget-category-value {
-        font-size: 0.78rem !important;
-    }
-
-    .goal-card {
-        padding: 0.85rem !important;
-    }
 }
 
 /* ── Print: oculta controles ── */
@@ -1757,20 +1622,36 @@ textarea {
         border-radius: 8px;
     }
 
+    /* ── Alertas no mobile: banner inline horizontal com scroll ── */
     #alerts-container {
-        top: auto;
-        left: 1rem;
-        right: 1rem;
-        bottom: calc(1rem + env(safe-area-inset-bottom));
-        transform: none;
-        width: auto;
-        max-height: 42vh;
-        padding: 0;
+        position: static !important;
+        top: auto; left: auto; right: auto; bottom: auto;
+        transform: none !important;
+        width: 100%;
+        max-height: none;
+        overflow-x: auto;
+        overflow-y: hidden;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        gap: 0.75rem;
+        padding: 0.25rem 0;
+        margin-bottom: 1.25rem;
+        /* Oculta scrollbar mas permite scroll */
+        scrollbar-width: none;
+        -ms-overflow-style: none;
     }
+    #alerts-container::-webkit-scrollbar { display: none; }
 
     .atlas-alert {
+        /* Card compacto com largura fixa para o carrossel horizontal */
+        min-width: 260px;
+        max-width: 260px;
+        flex-shrink: 0;
         align-items: flex-start;
-        gap: 0.75rem;
+        gap: 0.6rem;
+        padding: 0.75rem 0.9rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
     }
 
     .alert-content {
