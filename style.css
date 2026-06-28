@@ -1740,7 +1740,7 @@ textarea {
         border: 1px solid var(--border-light);
         border-radius: 12px;
         background: #fff;
-        color: #1e293b; /* Adicione uma cor escura para o texto do card se o app for dark mode */
+        color: #1e293b; /* ◄ ADICIONE ISSO: Força o texto a ficar escuro no celular */
         box-shadow: 0 8px 24px rgba(10,25,47,0.08);
         overflow: hidden;
     }
@@ -1761,13 +1761,13 @@ textarea {
         border-bottom: 0;
     }
 
-    #transaction-table tbody td::before {
-        color: var(--slate-light);
-        font-size: 0.68rem;
-        font-weight: 800;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-    }
+        #transaction-table tbody td::before {
+            color: #64748b; /* ◄ ADICIONE/SUBSTITUA ISSO: Um cinza escuro para os títulos dos cards */
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
 
     #transaction-table tbody td:nth-child(1)::before { content: "Descricao"; }
     #transaction-table tbody td:nth-child(2)::before { content: "Categoria"; }
